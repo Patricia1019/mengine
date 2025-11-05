@@ -18,7 +18,39 @@ def rotation_matrix_to_quaternion(R: np.ndarray) -> np.ndarray:
     # input: R: rotation matrix
     # output: q: quaternion
     # ------ TODO: Student answer below -------
-    return np.array([0, 0, 1, 0])
+    # Robust quaternion extraction using Shepperd's method
+    trace = R[0, 0] + R[1, 1] + R[2, 2]
+    
+    if trace > 0:
+        # Case 1: trace is positive
+        s = np.sqrt(trace + 1.0) * 2
+        w = 0.25 * s
+        x = (R[2, 1] - R[1, 2]) / s
+        y = (R[0, 2] - R[2, 0]) / s
+        z = (R[1, 0] - R[0, 1]) / s
+    elif R[0, 0] > R[1, 1] and R[0, 0] > R[2, 2]:
+        # Case 2: R[0,0] is largest
+        s = np.sqrt(1.0 + R[0, 0] - R[1, 1] - R[2, 2]) * 2
+        w = (R[2, 1] - R[1, 2]) / s
+        x = 0.25 * s
+        y = (R[0, 1] + R[1, 0]) / s
+        z = (R[0, 2] + R[2, 0]) / s
+    elif R[1, 1] > R[2, 2]:
+        # Case 3: R[1,1] is largest
+        s = np.sqrt(1.0 + R[1, 1] - R[0, 0] - R[2, 2]) * 2 
+        w = (R[0, 2] - R[2, 0]) / s
+        x = (R[0, 1] + R[1, 0]) / s
+        y = 0.25 * s
+        z = (R[1, 2] + R[2, 1]) / s
+    else:
+        # Case 4: R[2,2] is largest
+        s = np.sqrt(1.0 + R[2, 2] - R[0, 0] - R[1, 1]) * 2
+        w = (R[1, 0] - R[0, 1]) / s
+        x = (R[0, 2] + R[2, 0]) / s
+        y = (R[1, 2] + R[2, 1]) / s
+        z = 0.25 * s
+    
+    return np.array([x, y, z, w])
     # ------ Student answer above -------
 
 
@@ -27,7 +59,9 @@ def rodrigues_formula(n, x, theta):
     # input: n, x, theta: axis, point, angle
     # output: x_new: new point after rotation
     # ------ TODO Student answer below -------
-    return np.zeros(3)
+    n = n / np.linalg.norm(n)
+    x_new = x * np.cos(theta) + np.cross(n, x) * np.sin(theta) + n * np.dot(n, x) * (1 - np.cos(theta))
+    return x_new
     # ------ Student answer above -------
 
 
@@ -37,13 +71,20 @@ def axis_angle_to_quaternion(axis: np.ndarray, angle: float) -> np.ndarray:
     #        angle: angle of rotation (radians)
     # output: q: quaternion
     # ------ TODO: Student answer below -------
-    return np.array([0, 0, 1, 0])
+    axis = axis / np.linalg.norm(axis)
+    w = np.cos(angle / 2)
+    x = axis[0] * np.sin(angle / 2)
+    y = axis[1] * np.sin(angle / 2)
+    z = axis[2] * np.sin(angle / 2)
+    return np.array([x, y, z, w])
     # ------ Student answer above -------
 
 
 def hamilton_product(p: np.ndarray, q: np.ndarray) -> np.ndarray:
     # ------ TODO: Student answer below -------
-    return np.array([0, 0, 1, 0])
+    w = p[3] * q[3] - np.dot(p[:3], q[:3])
+    xyz = p[3] * q[:3] + q[3] * p[:3] + np.cross(p[:3], q[:3])
+    return np.array([*xyz, w])
     # ------ Student answer above -------
 
 
@@ -55,9 +96,10 @@ def unit_tests():
     q = rotation_matrix_to_quaternion(np.diag([1, -1, -1]))
     try:
         assert np.allclose(q, [1, 0, 0, 0]) or np.allclose(q, [-1, 0, 0, 0])
-        print("rotation_matrix_to_quaternion passed test case 1")
+        print("✅ rotation_matrix_to_quaternion passes test case 1")
     except AssertionError:
-        print("rotation_matrix_to_quaternion failed test case 1")
+        print("❌ rotation_matrix_to_quaternion failed test case 1")
+        print(f"results: {q}")
 
     R = np.array([[-0.545, 0.797, 0.260],
                   [0.733, 0.603, -0.313],
@@ -65,17 +107,18 @@ def unit_tests():
     q = rotation_matrix_to_quaternion(R)
     try:
         assert np.allclose(q, [0.437, 0.875, -0.0836, 0.191], atol=1e-3)
-        print("rotation_matrix_to_quaternion passed test case 2")
+        print("✅  rotation_matrix_to_quaternion passed test case 2")
     except AssertionError:
-        print("rotation_matrix_to_quaternion failed test case 2")
+        print("❌ rotation_matrix_to_quaternion failed test case 2")
+        print(f"results: {q}")
 
     # test axis_angle_to_quaternion
     q = axis_angle_to_quaternion(np.array([1, 0, 0]), 0.123)
     try:
         assert np.allclose(q, [0.06146124, 0, 0, 0.99810947])
-        print("axis_angle_to_quaternion passed test case")
+        print("✅  axis_angle_to_quaternion passed test case")
     except AssertionError:
-        print("axis_angle_to_quaternion failed test case")
+        print("❌ axis_angle_to_quaternion failed test case")
 
     # test hamilton_product
     p = np.array([0.437, 0.875, -0.0836, 0.191])
@@ -83,9 +126,9 @@ def unit_tests():
     try:
         assert np.allclose(hamilton_product(p, q),
                            [0.4479,  0.8682, -0.1372,  0.1638], atol=1e-3)
-        print("hamilton_product passed test case")
+        print("✅  hamilton_product passed test case")
     except AssertionError:
-        print("hamilton_product failed test case")
+        print("❌ hamilton_product failed test case")
 
 
 if __name__ == '__main__':
@@ -125,7 +168,7 @@ if __name__ == '__main__':
 
         # rotate using quaternion and the hamilton product
         # ------ TODO Student answer below -------
-        x_new_q = np.zeros(3)
+        x_new_q = hamilton_product(q, np.array([*x_new, 0]))
         # ------ Student answer above -------
 
         point.set_base_pos_orient(x_new)

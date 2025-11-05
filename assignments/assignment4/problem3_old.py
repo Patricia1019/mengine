@@ -21,6 +21,7 @@ def load_object(idx, obj_position):
         object = m.Shape(m.Mesh(filename=os.path.join(m.directory, 'ycb', f'{obj_name}.obj'), scale=[1, 1, 1]), static=False, mass=1.0, position=obj_position, orientation=[0, 0, 0, 1], rgba=None, visual=True, collision=True)
     return object
 
+
 def sample_grasp_ee_poses(obj, num_samples=100) -> List[Tuple[np.ndarray, np.ndarray]]:
     """
     Sample end effector poses around the object.
@@ -28,158 +29,63 @@ def sample_grasp_ee_poses(obj, num_samples=100) -> List[Tuple[np.ndarray, np.nda
     Returns:
         ee_poses: A list of end effector poses (position, orientation)
     """
-    # ------ TODO Student answer below -------
-    def make_frame(pos: np.ndarray, center: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-        # y -> toward center; z -> down; x completes RH basis
+    # AABB -> center & extents
+    obj_min, obj_max = obj.get_AABB()
+    center = 0.5 * (np.array(obj_min) + np.array(obj_max))
+    extents = np.array(obj_max) - np.array(obj_min)
+
+    # rim height ~ upper section of the object; ring radius slightly outside the rim
+    rim_z = center[2] + 0.34 * extents[2] 
+    radius = 0.5 * max(extents[:2]) + 0.030
+    inward_offset = 0.020  # push slightly toward center so fingers meet the rim
+
+    thetas = np.linspace(0.0, 2.0 * np.pi, num_samples, endpoint=False)
+    poses: List[Tuple[np.ndarray, np.ndarray]] = []
+
+    for th in thetas:
+        # position on ring
+        pos = np.array([center[0] + radius * np.cos(th),
+                        center[1] + radius * np.sin(th),
+                        rim_z])
+
+        # frame: y-axis -> to center; z-axis -> down; x completes RHS
         radial = center - pos
         y_axis = radial / (np.linalg.norm(radial) + 1e-9)
-        z_axis = np.array([0.0, 0.0, -1.0])
+        z_axis = np.array([0.0, 0.0, -1.0])  # wrist down
         x_axis = np.cross(y_axis, z_axis)
         if np.linalg.norm(x_axis) < 1e-8:
             x_axis = np.array([1.0, 0.0, 0.0])
-        x_axis /= (np.linalg.norm(x_axis))
+        x_axis /= np.linalg.norm(x_axis)
         z_axis = np.cross(x_axis, y_axis)
         z_axis /= (np.linalg.norm(z_axis) + 1e-9)
+
         R = np.column_stack([x_axis, y_axis, z_axis])
         if np.linalg.det(R) < 0:
             x_axis = -x_axis
             R = np.column_stack([x_axis, y_axis, z_axis])
         quat = m.get_quaternion(R)
-        return y_axis, quat, R
 
-    def is_bowl_like(dx: float, dy: float, dz: float) -> bool:
-        # circular planform and not very tall (heuristic; adjust if needed)
-        planar_ratio = max(dx, dy) / (min(dx, dy) + 1e-9) 
-        tall_ratio   = dz / (max(dx, dy) + 1e-9)
-        return (planar_ratio < 1.25) and (tall_ratio < 1.0)
+        # nudge inward so the gripper meets the rim
+        pos = pos + inward_offset * y_axis
 
-    # ---------- AABB geometry ----------
-    obj_min, obj_max = obj.get_AABB()
-    obj_min = np.array(obj_min); obj_max = np.array(obj_max)
-    center  = 0.5 * (obj_min + obj_max)
-    extents = obj_max - obj_min
-    dx, dy, dz = float(extents[0]), float(extents[1]), float(extents[2])
+        poses.append((pos, quat))
 
-    # ---------- decide profile ----------
-    bowl_like = is_bowl_like(dx, dy, dz)
-    print(f"[info] auto-detected bowl-like: {bowl_like}")
+    return poses
 
-    poses: List[Tuple[np.ndarray, np.ndarray]] = []
 
-    # ==========================================================
-    # 1) Bowl-like
-    # ==========================================================
-    if bowl_like:
-        n = num_samples
-        rim_z = center[2] + 0.34 * dz
-        radius = 0.5 * max(dx, dy) + 0.030
-        inward_offset = 0.020
-        thetas = np.linspace(0.0, 2.0 * np.pi, n, endpoint=False)
-        for th in thetas:
-            pos = np.array([center[0] + radius * np.cos(th),
-                            center[1] + radius * np.sin(th),
-                            rim_z])
-            y_axis, quat, _ = make_frame(pos, center)
-            pos = pos + inward_offset * y_axis
-            poses.append((pos, quat))
-        return poses[:num_samples]
-
-    # ==========================================================
-    # 2) Not bowl-like
-    # ==========================================================
-
-    # Side band just below top; add a second band slightly lower for safety
-    obj_min, obj_max = obj.get_AABB()
-    obj_min = np.array(obj_min); obj_max = np.array(obj_max)
-    center  = 0.5 * (obj_min + obj_max)
-    ext     = np.maximum(obj_max - obj_min, 1e-9)
-    half    = 0.5 * ext
-
-    # grasp across the shortest axis (0=x, 1=y, 2=z)
-    k = int(np.argmin(ext))
-    axis  = np.eye(3)[k]       
-    axes  = [0, 1, 2]; axes.remove(k)
-    a1, a2 = axes[0], axes[1]
-    t1 = np.eye(3)[a1]; t2 = np.eye(3)[a2] 
-
-    # grid on the face
-    GRID_N     = 3
-    FACE_SPAN  = 0.6
-    span1 = 0.5 * FACE_SPAN * float(ext[a1])
-    span2 = 0.5 * FACE_SPAN * float(ext[a2])
-    grid  = np.linspace(-1.0, 1.0, GRID_N)
-
-    STANDOFFS = (0.00, 0.02, 0.04) 
-
-    poses: List[Tuple[np.ndarray, np.ndarray]] = []
-    per_face = max(1, num_samples // 2)
-
-    for sign in (+1.0, -1.0): 
-        face_center = center + sign * half[k] * axis 
-        count = 0
-        for gx in grid:
-            for gy in grid:
-                pos_mid = center + gx * span1 * t1 + gy * span2 * t2
-
-                y_axis = sign * axis
-                z_axis = np.array([0.0, 0.0, -1.0])
-                if abs(np.dot(z_axis, y_axis)) > 0.95:
-                    z_axis = t2
-                z_axis /= np.linalg.norm(z_axis)
-                x_axis = np.cross(y_axis, z_axis); x_axis /= np.linalg.norm(x_axis)
-                z_axis = np.cross(x_axis, y_axis); z_axis /= np.linalg.norm(z_axis)
-                R = np.column_stack([x_axis, y_axis, z_axis])
-                if np.linalg.det(R) < 0:
-                    x_axis = -x_axis
-                    R = np.column_stack([x_axis, y_axis, z_axis])
-                quat = m.get_quaternion(R)
-
-                for s in STANDOFFS:
-                    poses.append((pos_mid + s * sign * axis, quat))
-                    if len(poses) >= num_samples: break
-                count += 1
-                if count >= per_face or len(poses) >= num_samples: break
-            if count >= per_face or len(poses) >= num_samples: break
-        if len(poses) >= num_samples: break
-
-    return poses[:num_samples]
-    # ------ Student answer above -------
 
 def get_antipodal_score(robot_joint_angles, pc, normals) -> float:
-    """Compute antipodal score for a given robot configuration (joint angles).
+    """Compute antipodal score for a candidate robot configuration."""
+    score = 0.0
 
-    Args:
-        robot_joint_angles: Robot joint angles
-        pc: Point cloud of target object
-        normals: Point cloud normals
-
-    Variables defined outside this function:
-        robot: mengine Robot
-        antipodal_region: A region that allows us to identify points within the gripper
-        gripper_line_vector: A vector that represents the gripper finger axis
-        half_extents: Half of the antipodal region bounding box extents
-
-    Returns:
-        score: Antipodal score
-
-    Notes:
-        1. Check if the robot is in collision or if there is no robot_joint_angles (no IK solution).
-        2. Set the robot to robot_joint_angles
-        3. Compute the antipodal score.
-        4. Restore the robot to its previous configuration.
-    """
-    score = 0
-
-    # No IK solution or in collision
+    # No IK or in collision → 0
     if robot_joint_angles is None or robot_in_collision(robot_joint_angles):
-        return 0
+        return 0.0
 
-    # Set robot to joint angles
+    # Set robot to evaluate
     prev_joint_angles = robot.get_joint_angles(robot.controllable_joints)
     robot.control(robot_joint_angles, set_instantly=True)
 
-    # ------ TODO Student answer below -------
-    # Hint: example code for computing an antipodal grasp score can be found in lecture13_antipodal.py
     # Put the evaluation box at current EE pose
     p, o = robot.get_link_pos_orient(robot.end_effector)
     antipodal_region.set_base_pos_orient(p, o)
@@ -211,7 +117,7 @@ def get_antipodal_score(robot_joint_angles, pc, normals) -> float:
 
     score = 0.7 * align + 0.3 * balance
 
-    # Restore robot to previous configuration
+    # Restore
     robot.control(prev_joint_angles, set_instantly=True)
     return score
 
@@ -219,16 +125,7 @@ def get_antipodal_score(robot_joint_angles, pc, normals) -> float:
 def find_best_grasp(obj, **kwargs) -> np.ndarray:
     """
     Find a robot configuration to grasp the given object.
-
-    Args:
-        obj: Object to grasp
-
-    Optional Args:
-        max_sample: Maximum number of samples to try
-        min_score: Minimum antipodal score to accept a grasp
-
-    Returns:
-        robot_joint_angles: Robot joint angles to grasp the object
+    Returns best joint angles (or None if none feasible).
     """
     max_sample = int(kwargs.get('max_sample', 120))
     min_score  = float(kwargs.get('min_score', 0.55))

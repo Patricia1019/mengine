@@ -26,7 +26,26 @@ def apply_transform(pos, orient, d, euler):
     #        euler: target rotation in euler angles
     # output: pos_new, orient_new: new position and orientation (rotation matrix) of the box
     # ------ TODO Student answer below -------
-    return np.zeros(3), np.eye(3)
+    def euler_to_rotation_matrix(alpha, beta, gamma):
+        # Convert euler angles (alpha, beta, gamma) to rotation matrix
+        # input: alpha, beta, gamma: euler angles
+        # output: R: rotation matrix
+
+        # ------ TODO Student answer below -------
+        def Rz(a):
+            return np.array([[np.cos(a), -np.sin(a), 0.0],
+                            [np.sin(a), np.cos(a), 0.0],
+                            [0.0, 0.0, 1.0]], dtype=float)
+        def Ry(b):
+            return np.array([[np.cos(b), 0.0, np.sin(b)],
+                            [0.0, 1.0, 0.0],
+                            [-np.sin(b), 0.0, np.cos(b)]], dtype=float)
+        R = Rz(alpha) @ Ry(beta) @ Rz(gamma)
+        return R
+    R = euler_to_rotation_matrix(*euler)
+    orient_new = orient.dot(R)
+    pos_new = pos + orient.dot(d)
+    return pos_new, orient_new
     # ------ Student answer above -------
 
 def wait_for_enter():

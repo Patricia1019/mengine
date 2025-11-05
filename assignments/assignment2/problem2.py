@@ -41,7 +41,15 @@ def get_exp_coordinates(omega, v, theta):
     #        theta: angle of rotation
     # output: E: exponential coordinates of the screw (4x4 matrix)
     # ------ TODO Student answer below -------
-    return np.eye(4)
+    omega_hat = np.array([[0, -omega[2], omega[1]],
+                         [omega[2], 0, -omega[0]],
+                         [-omega[1], omega[0], 0]])
+    
+    S_matrix = np.zeros((4, 4))
+    S_matrix[:3, :3] = omega_hat
+    S_matrix[:3, 3] = v
+    
+    return expm(S_matrix * theta)
     # ------ Student answer above -------
 
 
@@ -54,8 +62,43 @@ def calculate_FK(q, joint=3):
     # output: ee_position: position of the end effector
     #         ee_orientation: orientation of the end effector as a quaternion
     # ------ TODO Student answer below -------
-    # orientation = m.get_quaternion(orientation) # NOTE: If you used transformation matrices, call this function to get a quaternion
-    return np.zeros(3), np.array([0, 0, 0, 1])
+    
+    
+    # Screw axis 1: rotation around z-axis
+    omega1 = np.array([0, 0, 1])
+    v1 = np.array([0, 0, 0])
+    
+    # Screw axis 2: rotation around x-axis
+    omega2 = np.array([1, 0, 0])
+    p2 = np.array([0, 0, 0.5])
+    v2 = -np.cross(omega2, p2)
+    
+    # Screw axis 3: rotation around x-axis
+    omega3 = np.array([1, 0, 0])
+    p3 = np.array([0, 0, 0.9])  # 0.5 + 0.4
+    v3 = -np.cross(omega3, p3)
+    
+    # Home configuration M 
+    M = np.array([[1, 0, 0, 0],
+                  [0, 1, 0, 0], 
+                  [0, 0, 1, 1.2],  # 0.5 + 0.4 + 0.3
+                  [0, 0, 0, 1]])
+    
+    T = np.eye(4)
+    
+    if joint >= 1:
+        T = T @ get_exp_coordinates(omega1, v1, q[0])
+    if joint >= 2:
+        T = T @ get_exp_coordinates(omega2, v2, q[1])
+    if joint >= 3:
+        T = T @ get_exp_coordinates(omega3, v3, q[2])
+    
+    T = T @ M
+
+    ee_position = T[:3, 3]
+    ee_orientation = m.get_quaternion(T[:3, :3])
+    
+    return ee_position, ee_orientation
     # ------ Student answer above -------
 
 

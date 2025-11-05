@@ -74,29 +74,44 @@ def rrt_connect(init, goal, max_iterations=100):
     reference: http://www.kuffner.org/james/papers/kuffner_icra2000.pdf
     """
     """TODO: Your Answer HERE"""
-    raise NotImplementedError
 
     # RRT-connect steps, as detailed in the Kuffner and LaValle, 2000 paper
     # 1. Initialize two trees, T_a and T_b, with Nodes representing the start and goal configurations respectively
+    start_node = Node(np.array(init))
+    goal_node = Node(np.array(goal))
 
-    # At each iteration for k iterations:
+    tree_a = [start_node]  # tree from start
+    tree_b = [goal_node]   # tree from goal
 
-        # 2. Sample a random configuration, qrand, and attempt to extend T_a towards it to yield a new node
 
-        # If successful:
+    for k in range(max_iterations):
+        # 2. Sample a target configuration (with goal biasing)
+        target_config = random_sample_config()
 
-            # 3. Try to connect `Tb` to the new node, yielding a second new node
+        # 3. Extend tree_a toward the target configuration
+        new_node_a, extended_a = extend(tree_a, target_config)
 
-            # If successful:
+        # if extended_a:
+            # 4. Attempt to connect tree_b to the new node from tree_a
+        new_node_b, connected_b = extend(tree_b, new_node_a.angles)
 
-                # 4: Return the computed path
+        if extended_a and connected_b:
+            # 5. Path found - reconstruct the complete path
+            path_from_start = [node.angles for node in new_node_a.retrace()]
+            path_to_goal = [node.angles for node in new_node_b.retrace()[::-1]]
+            
+            # Remove duplicate meeting point if present
+            # if len(path_to_goal) > 0 and np.array_equal(path_from_start[-1], path_to_goal[0]):
+            #     path_to_goal = path_to_goal[1:]
+            
+            return path_from_start + path_to_goal
 
-        # 6. Swap trees T_a and T_b after each iteration
+        # Swap trees periodically to encourage bidirectional exploration
+        # if k % 4 == 0:
+        tree_a, tree_b = tree_b, tree_a
 
-    # 7. Return None if no path is found within the iteration limit
+    # 6. No path found within maximum iterations
     return None
-    """TODO: Your Answer END"""
-
 
 def is_ee_close(robot, joint_angles, pos, orient):
     """Returns True if the end effector is close to the given position and orientation."""
@@ -154,7 +169,7 @@ def moveto(robot, pos, orient, avoid_collision=False, max_iter=100, max_path_len
 
 
 # Create environment and ground plane
-env = m.Env(seed=1000)
+env = m.Env(seed=100)
 ground = m.Ground()
 m.visualize_coordinate_frame()
 

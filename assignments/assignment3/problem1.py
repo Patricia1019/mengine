@@ -50,8 +50,8 @@ def reset(scenario=0, n_steps=5, step_size=0.1):
 
         # ------ TODO Student answer below -------
         # Create point to rotate around axis
-        # rotation_axis = ?
-        # rotation_origin = ?
+        rotation_axis = np.array([0, 0, 1])
+        rotation_origin = np.array([-0.25, 0.05, 0])
         # ------ Student answer above -------
 
     if scenario == 1.3:
@@ -60,6 +60,8 @@ def reset(scenario=0, n_steps=5, step_size=0.1):
 
         # ------ TODO Student answer below -------
         # Add contact point(s) to fully constrain object
+        s3 = add_contact_point([0.1 + radius_contact_spheres, 0, 0])
+        s4 = add_contact_point([0.06, -0.08 - radius_contact_spheres, 0])
         # ------ Student answer above -------
 
 

@@ -43,6 +43,31 @@ def reset():
     # you can get the robot's current position using
     # pos = robot.get_base_pos_orient()[0]
 
+    # Sample a 2D grid of base positions and mark collisions
+    # sample position: red if in collision, green if collision-free.
+    xs = np.linspace(0.1, 1.2, 21)
+    ys = np.linspace(0.0, 1.2, 23)
+
+    samples = 0
+    for x in xs:
+        for y in ys:
+            sample_pos = np.array([x, y, 0.0])
+            moveto(robot, robot_marker, sample_pos)
+            for _ in range(5):
+                m.step_simulation(realtime=True)
+
+            contacts = robot.get_contact_points()
+            in_collision = bool(contacts)
+
+            color = [1, 0, 0, 1] if in_collision else [0, 1, 0, 1]
+            m.Shape(m.Sphere(radius=0.01), static=True, collision=False,
+                    position=sample_pos + np.array([0.0, 0.0, 0.02]), rgba=color)
+            samples += 1
+
+    print(f"Sampled {samples} positions and marked collision (red) / free (green)")
+
+    # return robot to initial pose and keep simulation running
+    moveto(robot, robot_marker, robot_init_position)
     while True:
         m.step_simulation(realtime=True)
 

@@ -56,8 +56,14 @@ def get_contact_screw(contact_location, contact_normal):
     """Returns the contact screw in screw coordinates given a contact location and contact_normal
     """
     # ------ TODO Student answer below -------
-
-    contact_screw = np.zeros(6)
+    n = np.array(contact_normal, dtype=float)
+    if np.linalg.norm(n) < 1e-8:
+        raise ValueError("contact_normal has zero length")
+    f = n / np.linalg.norm(n)
+    r = np.array(contact_location, dtype=float) - np.array(obj_pos, dtype=float)
+    m0 = np.cross(r, f)
+    contact_screw = np.concatenate([f, m0])
+    # contact_screw = np.zeros(6)
     # ------ Student answer above -------
 
     return contact_screw

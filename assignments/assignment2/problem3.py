@@ -10,7 +10,16 @@ def invertQ(q):
     """
     # ------ TODO Student answer below -------
     # NOTE: Optional, you do not need to use this function
-    return np.array([0, 0, 0, 1])
+    q = np.array(q, dtype=float)
+    x, y, z, w = q
+    
+    norm_sq = x**2 + y**2 + z**2 + w**2
+    
+    # Handle zero or near-zero quaternion case
+    if norm_sq < 1e-12:
+        return np.array([0.0, 0.0, 0.0, 1.0])
+    
+    return np.array([-x / norm_sq, -y / norm_sq, -z / norm_sq, w / norm_sq])
     # ------ Student answer above -------
 
 
@@ -20,6 +29,71 @@ def line_intersection(p1, p2, q1, q2):
     If there is an intersection, returns the point. Otherwise, returns None.
     """
     # ------ TODO Student answer below -------
+    d1 = p2 - p1
+    d2 = q2 - q1 
+    
+    # Check for degenerate line segments
+    d1_len = np.linalg.norm(d1)
+    d2_len = np.linalg.norm(d2)
+    
+    if d1_len < 1e-12 or d2_len < 1e-12:
+        return None
+    
+    # Vector between starting points
+    dp = p1 - q1
+    
+    # Check if lines are parallel
+    cross_d1_d2 = np.cross(d1, d2)
+    cross_norm = np.linalg.norm(cross_d1_d2)
+    
+    # If lines are parallel (cross product is zero)
+    if cross_norm < 1e-12:
+        # Check if lines are coincident (same line)
+        cross_dp_d1 = np.cross(dp, d1)
+        if np.linalg.norm(cross_dp_d1) < 1e-12:
+            # Lines are coincident, find overlap
+            # Project q1 and q2 onto line 1
+            dot_d1 = np.dot(d1, d1)
+            if dot_d1 > 1e-12:
+                t1 = np.dot(q1 - p1, d1) / dot_d1
+                t2 = np.dot(q2 - p1, d1) / dot_d1
+                
+                # Check for overlap in [0,1] range
+                t_min = max(0.0, min(t1, t2))
+                t_max = min(1.0, max(t1, t2))
+                
+                if t_min <= t_max:
+                    # Return midpoint of overlap
+                    t_mid = (t_min + t_max) * 0.5
+                    return p1 + t_mid * d1
+        return None
+    
+    # If lines are not parallel
+    cross_norm_sq = cross_norm * cross_norm
+    
+    cross_d2_dp = np.cross(d2, dp)
+    cross_d1_dp = np.cross(d1, dp)
+    
+    t1 = np.dot(cross_d2_dp, cross_d1_d2) / cross_norm_sq
+    t2 = np.dot(cross_d1_dp, cross_d1_d2) / cross_norm_sq
+    
+    # Check if intersection points are within the line segments [0,1]
+    if 0.0 <= t1 <= 1.0 and 0.0 <= t2 <= 1.0:
+        # Calculate the two closest points
+        point1 = p1 + t1 * d1
+        point2 = q1 + t2 * d2
+        
+        # Check if the lines actually intersect (distance between closest points)
+        distance = np.linalg.norm(point1 - point2)
+        
+        if distance < 1e-6:  # Lines intersect within tolerance
+            return (point1 + point2) * 0.5
+        
+        # For nearly intersecting lines, still return the midpoint
+        # This is useful for the instantaneous center calculation
+        if distance < 0.01:  # More generous tolerance for IC calculation
+            return (point1 + point2) * 0.5
+    
     return None
     # ------ Student answer above -------
 

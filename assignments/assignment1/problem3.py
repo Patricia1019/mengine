@@ -28,9 +28,43 @@ def sample_configuration():
     # output: q: joint angles of the robot
     # ------ TODO Student answer below -------
     print('TODO sample_configuration')
-    return np.zeros(3)
+    joint_limits = np.array([[-np.pi, np.pi/2], [-np.pi/2, np.pi/2], [-np.pi, np.pi/2]])
+    q = np.random.uniform(joint_limits[:,0], joint_limits[:,1], size= (3,))
+    return q
     # ------ Student answer above -------
 
+L1, L2, L3 = 0.5, 0.4, 0.3 
+def Rz(a):
+    return np.array([[np.cos(a), -np.sin(a), 0.0],
+                    [np.sin(a), np.cos(a), 0.0],
+                    [0.0, 0.0, 1.0]], dtype=float)
+
+def Rx(b):
+    return np.array([[1.0, 0.0, 0.0],
+                    [0.0, np.cos(b), -np.sin(b)],
+                    [0.0, np.sin(b), np.cos(b)]], dtype=float)
+def Tz(d):
+    T = np.eye(4)
+    T[:3, 3] = [0.0, 0.0, d]
+    return T
+def compose(R, p):
+    T = np.eye(4)
+    T[:3,:3] = R
+    T[:3, 3] = p
+    return T
+def fk_all(q):
+    q1, q2, q3 = q
+    T0 = np.eye(4)
+    # Joint 1
+    T1 = T0 @ compose(Rz(q1), np.zeros(3))
+    T1_link_end = T1 @ Tz(L1)
+    # Joint 2
+    T2 = T1_link_end @ compose(Rx(q2), np.zeros(3))
+    T2_link_end = T2 @ Tz(L2)
+    # Joint 3
+    T3 = T2_link_end @ compose(Rx(q3), np.zeros(3))
+    T_EE = T3 @ Tz(L3)
+    return T1, T2, T3, T_EE
 
 def calculate_FK(q, joint=3):
     # Calculate the forward kinematics of the robot
@@ -41,9 +75,13 @@ def calculate_FK(q, joint=3):
     #         ee_orientation: orientation of the end effector
     # ------ TODO Student answer below -------
     print('TODO calculate_FK')
-    position = np.zeros(3)
-    orientation = np.zeros(4)
-    # orientation = m.get_quaternion(orientation) # NOTE: If you used transformation matrices, call this function to get a quaternion
+    T1, T2, T3, T_EE = fk_all(q)
+    if joint == 1: T = T1
+    elif joint == 2: T = T2
+    elif joint == 3: T = T_EE
+    else: T = T_EE
+    position = T[:3, 3]
+    orientation = m.get_quaternion(T[:3, :3])
     # ------ Student answer above -------
     return position, orientation
 
@@ -88,8 +126,13 @@ def check_collision(q, box_position, box_half_extents):
     #        box_position: position of the collision region
     #        box_half_extents: half extents of the collision region
     # output: in_collision: True if the robot is in collision region, False otherwise
-    # ------ TODO Student answer below -------
-    print('TODO check_collision')
+    # ------ TODO Student answer below -------  
+    T1, T2, T3, T_EE = fk_all(q)
+    joint_positions = [T1[:3, 3], T2[:3, 3], T3[:3, 3], T_EE[:3, 3]]
+    for pos in joint_positions:
+        if np.all(np.abs(pos - box_position) <= box_half_extents):
+            return True
+        
     return False
     # ------ Student answer above -------
 
@@ -134,6 +177,7 @@ wait_for_enter()
 for i in range(1000):
     # sample a random configuration q
     # TODO
+    q = sample_configuration()
 
     # move robot into configuration q
     robot.control(q, set_instantly=True)
@@ -141,6 +185,7 @@ for i in range(1000):
 
     # calculate ee_position, ee_orientation using calculate_FK
     # TODO
+    ee_position, ee_orientation = calculate_FK(q, joint=3)
 
     # plot workspace as points of the end effector
     plot_point(ee_position)
